@@ -15,6 +15,9 @@ classifiers = [
   "Programming Language :: Python :: 3 :: Only",
 ]
 
+[project.optional-dependencies]
+tui = ["textual>=8.0.0"]
+
 [project.urls]
 UpstreamReference = "https://github.com/KingCyrus20/FFIV-Save-Editor"
 

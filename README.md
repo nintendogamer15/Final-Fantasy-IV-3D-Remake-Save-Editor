@@ -28,13 +28,55 @@ It was built for the post-2020 save format where older save editors can still mo
 ## Requirements
 
 - Python 3.10 or newer recommended.
-- No third-party Python packages.
+- No third-party Python packages for the CLI tool itself.
+- The optional TUI (below) needs the third-party `textual` package.
 
 Check Python:
 
 ```bash
 python3 --version
 ```
+
+## TUI (interactive terminal UI)
+
+`ffiv3d_save_tui.py` is an optional, more visual front-end for the same editing
+logic in `ffiv3d_save_tool.py` (it imports from that file directly, so the two
+never drift apart). It shows checksum status, party stats, and inventory for
+visible slots 1/2/3 in tabs, with buttons for every action the CLI supports,
+instead of needing to remember flag combinations.
+
+The redundant/shadow copy at `0xB940` is intentionally not shown anywhere in
+the TUI. It isn't a separate thing to manage: every slot-targeting action
+already updates it automatically behind the scenes whenever it's occupied,
+exactly like the CLI's default `--slot` behavior described above.
+
+Install the one extra dependency it needs:
+
+```bash
+pip install textual
+# or: pip install -e ".[tui]"
+```
+
+Run it:
+
+```bash
+python3 ffiv3d_save_tui.py SAVE.BIN
+```
+
+or launch it first and type/browse to a path inside the app:
+
+```bash
+python3 ffiv3d_save_tui.py
+```
+
+In the TUI:
+
+- Pick a target slot (`1`/`2`/`3`/`all`) in the sidebar, same meaning as `--slot`. Switching the slot tab on the right and switching the radio button in the sidebar stay in sync with each other — changing one updates the other.
+- Click an action button (Max Party, Give Everything, Equip Best, etc.) to apply it to the selected slot; checksums are recalculated automatically after every edit, same as the CLI.
+- "Add Item" can be filled in two ways: pick a name from the dropdown list, or type a name/hex ID directly into the text field, same matching rules as `--add-item`.
+- "Write New File" writes to the path in the output box (or an auto-generated `*.edited.BIN` name) without touching your input file.
+- "Write In-Place" asks for confirmation, then backs up the original to `.bak` before overwriting it, same as `--in-place`.
+- The log panel at the bottom shows the result of every action, and the tabs refresh immediately so you can see the effect.
 
 ## Quick start
 
