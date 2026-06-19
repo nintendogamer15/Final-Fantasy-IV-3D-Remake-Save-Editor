@@ -1,4 +1,11 @@
-# FFIV 3D Remake SAVE.BIN Tool
+# FFIV 3D Remake Save Editor
+
+## Human written foreword
+
+This tool is pretty much all AI generated, besides what was taken from the repo of the old save editor by KingCyrus20 which is listed below.
+I'm not a programmer, and the code is probably a giant mess, but it works. KingCyrus20's editor stopped working because an update to the game in 2020 changed how saves work. There are now (I think) multiple checksums that need to be validated. By bouncing some saves around several AI agents and doing some trial and error testing, they seem to have cracked it. I left their explanation for how all that works in the file titled FFIV_3D_CHECKSUM_ISSUE_EXPLAINED.
+Anyway, I'll let Jippity take it from here.
+
 
 `ffiv3d_save_tool.py` is a standalone Python 3 command-line utility for the PC/GOG/Steam **Final Fantasy IV 3D Remake** `SAVE.BIN` format.
 
