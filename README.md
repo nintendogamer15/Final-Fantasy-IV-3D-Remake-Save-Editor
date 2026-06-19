@@ -13,6 +13,11 @@ It was built for the post-2020 save format where older save editors can still mo
 
 ## Features
 
+
+<img width="1382" height="825" alt="image" src="https://github.com/user-attachments/assets/ed38a0ce-29a9-4f4d-8bc5-38cfb2060302" />
+
+
+
 - Inspect visible save slots and the redundant/shadow copy.
 - Recalculate post-2020 checksums.
 - Edit slot 1, slot 2, slot 3, all occupied slots, or only the redundant copy.
