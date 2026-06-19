@@ -1,0 +1,429 @@
+FFIV 3D Remake post-2020 SAVE.BIN checksum issue, technically explained
+=========================================================================
+
+Immediate answer
+----------------
+
+For each occupied save-copy region, the post-2020 checksum is:
+
+    checksum = (sum_u32_le(data[B + 0x20 : B + 0x3DC0]) + 0x010FC266) & 0xFFFFFFFF
+
+Where:
+
+    B = save-copy base address
+
+Known bases:
+
+    visible slot 1:       B = 0x0000
+    visible slot 2:       B = 0x3DC0
+    visible slot 3:       B = 0x7B80
+    redundant/shadow:     B = 0xB940
+
+Stored checksum field:
+
+    B + 0x1C, little-endian u32
+
+Checksum body:
+
+    B + 0x20 through B + 0x3DBF inclusive
+    [B + 0x20, B + 0x3DC0) as an end-exclusive range
+
+Checksum constant:
+
+    0x010FC266
+
+Body length:
+
+    0x3DC0 - 0x20 = 0x3DA0 bytes
+    0x3DA0 / 4 = 3944 little-endian u32 words
+
+Python reference implementation:
+
+    def u32le(data, off):
+        return int.from_bytes(data[off:off + 4], "little")
+
+    def calc_checksum(data, base):
+        total = 0
+        for off in range(base + 0x20, base + 0x3DC0, 4):
+            total = (total + u32le(data, off)) & 0xFFFFFFFF
+        return (total + 0x010FC266) & 0xFFFFFFFF
+
+    def write_checksum(data, base):
+        ck = calc_checksum(data, base)
+        data[base + 0x1C : base + 0x20] = ck.to_bytes(4, "little")
+
+Observed proof values
+---------------------
+
+The formula reproduced all observed active primary and redundant-copy checksums from real game-written saves used during testing.
+
+Observed examples:
+
+    SAVE(Original), primary copy
+        base       = 0x0000
+        body sum   = 0x1D948B1E
+        constant   = 0x010FC266
+        calculated = 0x1EA44D84
+        stored     = 0x1EA44D84
+
+    SAVE(Original), redundant copy
+        base       = 0xB940
+        body sum   = 0x22E20673
+        constant   = 0x010FC266
+        calculated = 0x23F1C8D9
+        stored     = 0x23F1C8D9
+
+    SAVE(2), primary copy
+        base       = 0x0000
+        body sum   = 0x5D968806
+        constant   = 0x010FC266
+        calculated = 0x5EA64A6C
+        stored     = 0x5EA64A6C
+
+    SAVE(2), redundant copy
+        base       = 0xB940
+        body sum   = 0x6586B777
+        constant   = 0x010FC266
+        calculated = 0x669679DD
+        stored     = 0x669679DD
+
+The constant is also recovered by subtraction:
+
+    stored - body_sum mod 2^32 = 0x010FC266
+
+For all four examples above, the inferred constant is the same.
+
+What changed after the game update
+----------------------------------
+
+Older FFIV 3D save editing was straightforward because the public editor knew the basic save layout: slot spacing, character-table offsets, inventory offsets, item IDs, equipment IDs, and equipment slot offsets.
+
+After the November 2020-era update, editing the same values without repairing the newer checksum behavior causes the game to reject the save. The visible symptom is usually severe: the game may hide the Load option entirely instead of showing a corrupted slot.
+
+The broken assumption was that a small checksum window was enough.
+
+A narrow formula over:
+
+    0x20 through 0x7F
+
+could make a very small HP/MP quick-block edit load. That was misleading. It only worked because the changed quick HP/MP bytes sat inside that small area. Once edits touched the detailed character table, PRTY data, inventory, or equipment, the checksum stopped matching because the actual protected body is much larger:
+
+    0x20 through 0x3DBF, relative to the copy base
+
+The update did not merely require a checksum at one hardcoded file offset. It requires each active save-copy body to be internally consistent with its own checksum field.
+
+Copy layout
+-----------
+
+The whole file is 65536 bytes:
+
+    0x10000 bytes
+
+The old visible slot spacing is:
+
+    0x3DC0 bytes
+
+Visible slot bases:
+
+    slot 1 = 0x0000
+    slot 2 = 0x3DC0
+    slot 3 = 0x7B80
+
+A separate redundant/shadow active copy exists at:
+
+    0xB940
+
+This is not simply “slot 4” in the ordinary UI sense. It behaves like a redundant active save-copy region. Depending on which slot was recently saved or which copy the game prefers, editing only the visible slot may not affect what the game actually loads.
+
+Practical rule:
+
+    When editing slot 1, 2, or 3, also edit the redundant copy at 0xB940 if it is occupied.
+
+That is why the tool now updates the redundant copy by default.
+
+Header fields
+-------------
+
+Each occupied save-copy region starts with recognizable header bytes:
+
+    63 64 31 30 30 30 00 42 41 42 69 6C ...
+
+ASCII-ish:
+
+    cd1000\0BABil...
+
+Important relative header fields:
+
+    +0x18: observed counter/generation-like value, u32 little-endian
+    +0x1C: checksum, u32 little-endian
+    +0x20: start of checksummed body
+
+Observed `+0x18` values in test saves:
+
+    SAVE(Original), primary:   0x00000440
+    SAVE(Original), backup:    0x0000043F
+    SAVE(2), primary:          0x00000448
+    SAVE(2), backup:           0x00000447
+
+The `+0x18` field is outside the checksum body. It appears to be a counter or generation value. The tool preserves it rather than trying to synthesize new counter behavior.
+
+The checksum field itself is also outside the body:
+
+    checksum field = B + 0x1C
+    checksum body starts at B + 0x20
+
+So the algorithm does not zero the checksum field. It simply sums the body after the checksum field.
+
+Algorithm details
+-----------------
+
+For a copy base `B`:
+
+1. Start at `B + 0x20`.
+2. End before `B + 0x3DC0`.
+3. Read every four bytes as a little-endian unsigned 32-bit integer.
+4. Add all 3944 words modulo `2^32`.
+5. Add `0x010FC266` modulo `2^32`.
+6. Write the result as little-endian `u32` at `B + 0x1C`.
+
+This is not CRC32, Adler32, SHA, MD5, or a cryptographic signature. It is a simple little-endian 32-bit additive checksum with a fixed constant.
+
+Endianness matters.
+
+For bytes:
+
+    84 4D A4 1E
+
+The stored u32 is:
+
+    0x1EA44D84
+
+not:
+
+    0x844DA41E
+
+Why edits failed before
+-----------------------
+
+There were three separate failure modes that looked like “checksum problems.”
+
+1. Wrong checksum range
+
+   The early formula only covered `[0x20, 0x80)`. It worked only for quick HP/MP edits. Any edit beyond that range changed data that the game also included in the real checksum, so the stored checksum became wrong.
+
+2. Redundant copy not edited
+
+   The file has a redundant active copy at `0xB940`. If the visible slot is edited but the redundant copy is stale, the game may validate or load the redundant copy instead. In-game, this can look like the edit did not happen.
+
+3. Correct checksum, wrong game field
+
+   Some values loaded but did not display correctly because the wrong source field had been edited. HP and MP are the clearest examples. The detailed table contains current/max fields, but separate source/cap fields also have to be updated.
+
+Known character fields
+----------------------
+
+The detailed character table begins at relative:
+
+    FIRST_CHAR = 0x9C
+
+Character row spacing:
+
+    CHAR_SEP = 0x1D4
+
+Character row fields used by the tool:
+
+    +0x00: level, u8
+    +0x04: EXP, u32 little-endian
+    +0x0A: HP cap/source, u16 little-endian
+    +0x0C: current HP, u32 little-endian
+    +0x10: max HP, u32 little-endian
+    +0x14: current MP, u32 little-endian
+    +0x18: max MP, u32 little-endian
+    +0x1CA: Strength, u8
+    +0x1CB: Stamina, u8
+    +0x1CC: Speed, u8
+    +0x1CD: Intellect, u8
+    +0x1CE: Spirit, u8
+    +0x1D0: MP cap/source, u16 little-endian
+
+Target values used for maxing:
+
+    HP current/max:       9999
+    HP source/cap:        9999
+    MP current/max:       999
+    MP source/cap:        999
+    level:                99
+    EXP:                  9999999
+    base stats:           99
+
+Important discovery:
+
+    HP will not reliably stick without relative +0x0A.
+    MP will not reliably stick without relative +0x1D0.
+
+Inventory fields
+----------------
+
+Known inventory fields:
+
+    FIRST_ITEM = 0x1AF0, relative to the save-copy base
+    ITEM_COUNT = 0x20F4, relative to the save-copy base
+    ITEM_SEP = 0x04
+
+Inventory entry format:
+
+    u16 item_id, little-endian
+    u16 quantity, little-endian
+
+The tool merges added items into existing inventory entries when possible, then appends new entries until the observed capacity is reached.
+
+Equipment fields
+----------------
+
+Character row equipment fields used by the old editor and current tool:
+
+    +0x26: right hand, u16 little-endian item/equipment ID
+    +0x28: left hand, u16 little-endian item/equipment ID
+    +0x2A: head, u16 little-endian item/equipment ID
+    +0x2C: body, u16 little-endian item/equipment ID
+    +0x2E: arms, u16 little-endian item/equipment ID
+
+Testing showed base stats and PRTY-like experiments did not move the displayed lower battle stats enough by themselves. Equipment did. So Attack, Accuracy, Defense, Evasion, Magic Defense, and Magic Evasion should be treated as gear/formula-derived stats rather than simple stored fields to patch blindly.
+
+Why inactive regions should be treated carefully
+------------------------------------------------
+
+The file may contain regions at:
+
+    0x3DC0
+    0x7B80
+
+When no visible slot exists there, those regions can be empty or sentinel-like rather than normal occupied save copies.
+
+An inactive region may contain a checksum-looking value such as:
+
+    0x01100002
+
+But applying the occupied-copy formula to an all-empty body would produce:
+
+    0x010FC266
+
+That mismatch is why the tool tries to detect occupied slots instead of blindly rewriting every `0x3DC0` region.
+
+Current workaround implemented by the tool
+------------------------------------------
+
+For each selected visible slot:
+
+1. Check whether the visible slot appears occupied.
+2. Edit the selected visible slot body.
+3. If the redundant copy at `0xB940` appears occupied, apply the same logical edit there too.
+4. Recalculate the checksum for each edited occupied copy.
+5. Leave untouched inactive/sentinel regions alone.
+6. Preserve header/counter fields.
+
+For `--slot all`:
+
+1. Edit all occupied visible slots.
+2. Edit the redundant copy if occupied.
+3. Recalculate checksums for all edited occupied copies.
+
+For `--slot backup`:
+
+1. Edit only the redundant copy at `0xB940`.
+2. Recalculate only that copy's checksum.
+
+Technical example
+-----------------
+
+Suppose slot 2 is selected:
+
+    visible slot 2 base = 0x3DC0
+    redundant base      = 0xB940
+
+For the visible slot, checksum writes to:
+
+    0x3DC0 + 0x1C = 0x3DDC
+
+and sums:
+
+    0x3DC0 + 0x20 through 0x3DC0 + 0x3DBF
+    0x3DE0 through 0x7B7F inclusive
+
+End-exclusive:
+
+    [0x3DE0, 0x7B80)
+
+For the redundant copy, checksum writes to:
+
+    0xB940 + 0x1C = 0xB95C
+
+and sums:
+
+    0xB960 through 0xF6FF inclusive
+
+End-exclusive:
+
+    [0xB960, 0xF700)
+
+If only slot 2 at `0x3DC0` is edited and `0xB940` is left stale, the game may still prefer or validate against the stale copy. This is why redundant-copy editing is now default behavior.
+
+Relationship to the old public editor
+-------------------------------------
+
+The old public FFIV-Save-Editor remains useful because it documented or encoded several major layout facts:
+
+    GIL = 0x88
+    FIRST_CHAR = 0x9C
+    TIME = 0x2304
+    SLOT_SEPARATION = 0x3DC0
+    ITEM_COUNT = 0x20F4
+    FIRST_ITEM = 0x1AF0
+    FIRST_QUANTITY = 0x1AF2
+    ITEM_SEPARATION = 0x04
+    character stat/equipment relative offsets
+    item IDs
+    equipment IDs
+
+The current Python tool adds:
+
+    post-2020 checksum calculation
+    redundant-copy handling at 0xB940
+    slot 1/2/3 targeting
+    current-party detection
+    HP source/cap field at +0x0A
+    MP source/cap field at +0x1D0
+    command-line item/gear insertion
+    in-game-tested max-stat behavior
+
+Confidence and limitations
+--------------------------
+
+High confidence:
+
+    The active occupied-copy checksum formula is correct for the tested current PC/GOG save layout.
+    The checksum constant is 0x010FC266.
+    The checksum field is relative +0x1C.
+    The checksummed body is relative [0x20, 0x3DC0).
+    The value is little-endian u32.
+    Updating the redundant copy at 0xB940 is necessary for practical multi-slot reliability.
+
+Medium confidence:
+
+    The same layout applies to all current PC/GOG/Steam releases.
+    The header +0x18 field is a generation/counter value.
+    The redundant copy selection behavior is counter-based or fallback-based.
+
+Not claimed:
+
+    The executable has not been fully decompiled.
+    Square Enix source code is not available here.
+    This does not prove every possible story state/equipment state is valid.
+    This does not bypass normal in-game equipment restrictions.
+
+Licensing note
+--------------
+
+Some non-checksum layout information in the current tool is based on or cross-checked against KingCyrus20/FFIV-Save-Editor, licensed under GNU LGPL v3.0. In particular, the older editor provided useful item/equipment ID tables and baseline offsets for character rows, inventory entries, equipment slots, and slot spacing.
+
+The current repository includes third-party notices and LGPL/GPL license texts for publication.

@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+.env
+
+# Local save files and backups
+*.BIN
+*.bin
+*.bak
+*.backup
+SAVE*.BIN
+SAVE*.bin
+
+# Archives / generated output
+*.zip
+*.tar.gz
+*.7z
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
