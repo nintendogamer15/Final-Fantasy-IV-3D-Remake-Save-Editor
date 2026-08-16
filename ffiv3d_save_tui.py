@@ -18,6 +18,7 @@ third-party dependencies; only this TUI front-end does):
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from textual.app import App, ComposeResult
@@ -26,7 +27,6 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import (
     Button,
-    Checkbox,
     DataTable,
     Footer,
     Header,
@@ -257,7 +257,7 @@ class FFIVSaveApp(App):
         path = Path(path_str)
         try:
             raw = bytearray(path.read_bytes())
-            tool.validate_save_size(raw)
+            tool.validate_save(raw)
         except OSError as exc:
             self.log_line(f"Could not read {path}: {exc}", "bold red")
             return
@@ -324,20 +324,36 @@ class FFIVSaveApp(App):
 
     # --------------------------------------------------------------- actions
 
-    def _target_bases(self) -> list[int] | None:
-        assert self.data is not None
-        try:
-            return tool.select_copy_bases(self.data, self.selected_slot_value())
-        except ValueError as exc:
-            self.log_line(f"error: {exc}", "bold red")
-            return None
-
-    def _quantity(self) -> int:
+    def _quantity(self) -> int | None:
         raw = self.query_one("#quantity_input", Input).value.strip()
         try:
-            return int(raw)
-        except ValueError:
-            return 99
+            return tool.validate_quantity(int(raw, 10))
+        except ValueError as exc:
+            self.log_line(f"Invalid quantity: {exc}", "bold red")
+            return None
+
+    def _perform_edit(
+        self,
+        operation: Callable[[bytearray, list[int]], str],
+        *,
+        fix_checksums: bool = True,
+    ) -> None:
+        """Apply an action to a copy and commit it only after full success."""
+        if self.data is None:
+            return
+        candidate = bytearray(self.data)
+        try:
+            bases = tool.select_copy_bases(candidate, self.selected_slot_value())
+            message = operation(candidate, bases)
+            if fix_checksums:
+                tool.fix_checksums(candidate, bases)
+        except (IndexError, KeyError, OverflowError, TypeError, ValueError) as exc:
+            self.log_line(f"Edit failed: {exc}", "bold red")
+            return
+        self.data = candidate
+        suffix = f" (checksums fixed for {self._labels(bases)})" if fix_checksums else ""
+        self.log_line(message + suffix, "green")
+        self.refresh_views()
 
     def on_select_changed(self, event: Select.Changed) -> None:
         if event.select.id != "add_item_select" or event.value == Select.BLANK:
@@ -361,38 +377,36 @@ class FFIVSaveApp(App):
             return
 
         if button_id == "max_party_btn":
-            bases = self._target_bases()
-            if bases is None:
-                return
-            by_base = tool.max_party(self.data, bases)
-            self._finish_edit(f"maxed current-party rows: {self._summarize(by_base)}", bases)
+            def max_party(candidate: bytearray, bases: list[int]) -> str:
+                by_base = tool.max_party(candidate, bases)
+                return f"maxed current-party rows: {self._summarize(by_base)}"
+
+            self._perform_edit(max_party)
 
         elif button_id == "max_all_btn":
-            bases = self._target_bases()
-            if bases is None:
-                return
-            by_base = tool.max_all_chars(self.data, bases)
-            self._finish_edit(f"maxed non-empty roster rows: {self._summarize(by_base)}", bases)
+            def max_all(candidate: bytearray, bases: list[int]) -> str:
+                by_base = tool.max_all_chars(candidate, bases)
+                return f"maxed non-empty roster rows: {self._summarize(by_base)}"
+
+            self._perform_edit(max_all)
 
         elif button_id in ("give_items_btn", "give_gear_btn", "give_everything_btn"):
-            bases = self._target_bases()
-            if bases is None:
-                return
             additions: list[int] = []
             if button_id in ("give_items_btn", "give_everything_btn"):
                 additions.extend(tool.ITEMS.keys())
             if button_id in ("give_gear_btn", "give_everything_btn"):
                 additions.extend(tool.ALL_GEAR.keys())
             qty = self._quantity()
-            tool.upsert_inventory(self.data, additions, quantity=qty, bases=bases)
-            self._finish_edit(
-                f"added/updated {len(set(additions))} inventory entries to quantity >= {qty}", bases
-            )
+            if qty is None:
+                return
+
+            def give(candidate: bytearray, bases: list[int]) -> str:
+                tool.upsert_inventory(candidate, additions, quantity=qty, bases=bases)
+                return f"added/updated {len(set(additions))} inventory entries to quantity >= {qty}"
+
+            self._perform_edit(give)
 
         elif button_id == "add_item_btn":
-            bases = self._target_bases()
-            if bases is None:
-                return
             token = self.query_one("#add_item_input", Input).value.strip()
             if not token:
                 self.log_line("Enter an item/gear name or hex ID first.", "yellow")
@@ -403,27 +417,30 @@ class FFIVSaveApp(App):
                 self.log_line(f"error: {exc}", "bold red")
                 return
             qty = self._quantity()
-            tool.upsert_inventory(self.data, [item_id], quantity=qty, bases=bases)
+            if qty is None:
+                return
             name = tool.ALL_KNOWN.get(item_id, f"0x{item_id:04X}")
-            self._finish_edit(f"added {name} (0x{item_id:04X}) qty>={qty}", bases)
+
+            def add_item(candidate: bytearray, bases: list[int]) -> str:
+                tool.upsert_inventory(candidate, [item_id], quantity=qty, bases=bases)
+                return f"added {name} (0x{item_id:04X}) qty>={qty}"
+
+            self._perform_edit(add_item)
 
         elif button_id == "equip_best_btn":
-            bases = self._target_bases()
-            if bases is None:
-                return
-            changed = tool.equip_best_final_party(self.data, bases)
-            self._finish_edit(
-                f"equipped: {', '.join(changed) if changed else 'no matching late-game party rows detected'}",
-                bases,
-            )
+            def equip_best(candidate: bytearray, bases: list[int]) -> str:
+                changed = tool.equip_best_final_party(candidate, bases)
+                names = ", ".join(changed) if changed else "no matching late-game party rows detected"
+                return f"equipped: {names}"
+
+            self._perform_edit(equip_best)
 
         elif button_id == "fix_checksum_btn":
-            bases = self._target_bases()
-            if bases is None:
-                return
-            tool.fix_checksums(self.data, bases)
-            self.log_line(f"fixed checksums for: {self._labels(bases)}", "green")
-            self.refresh_views()
+            def fix_checksum(candidate: bytearray, bases: list[int]) -> str:
+                tool.fix_checksums(candidate, bases)
+                return f"fixed checksums for: {self._labels(bases)}"
+
+            self._perform_edit(fix_checksum, fix_checksums=False)
 
         elif button_id == "write_out_btn":
             self._write_out()
@@ -432,7 +449,7 @@ class FFIVSaveApp(App):
             self.push_screen(
                 ConfirmScreen(
                     f"Overwrite {self.save_path} in place?\n"
-                    f"A backup will be written to {self.save_path}.bak first."
+                    "A new numbered .bak backup will be written first."
                 ),
                 self._on_inplace_confirmed,
             )
@@ -443,13 +460,8 @@ class FFIVSaveApp(App):
     def _summarize(self, by_base: dict[int, list[int]]) -> str:
         return "; ".join(f"{tool.slot_label_for_base(base)}={rows}" for base, rows in by_base.items())
 
-    def _finish_edit(self, message: str, bases: list[int]) -> None:
-        tool.fix_checksums(self.data, bases)
-        self.log_line(f"{message} (checksums fixed for {self._labels(bases)})", "green")
-        self.refresh_views()
-
     def _write_out(self) -> None:
-        if not self.require_data():
+        if not self.require_data() or self.save_path is None:
             return
         out_value = self.query_one("#out_input", Input).value.strip()
         if out_value:
@@ -460,8 +472,8 @@ class FFIVSaveApp(App):
             self.log_line("No output path and no loaded file path to derive one from.", "bold red")
             return
         try:
-            out_path.write_bytes(self.data)
-        except OSError as exc:
+            tool.write_new_save(self.save_path, out_path, self.data)
+        except (OSError, ValueError) as exc:
             self.log_line(f"Could not write {out_path}: {exc}", "bold red")
             return
         self.log_line(f"wrote: {out_path}", "bold green")
@@ -469,11 +481,9 @@ class FFIVSaveApp(App):
     def _on_inplace_confirmed(self, confirmed: bool | None) -> None:
         if not confirmed or self.data is None or self.save_path is None:
             return
-        backup = self.save_path.with_suffix(self.save_path.suffix + ".bak")
         try:
-            backup.write_bytes(self.save_path.read_bytes())
-            self.save_path.write_bytes(self.data)
-        except OSError as exc:
+            backup = tool.write_in_place_with_backup(self.save_path, self.data)
+        except (OSError, ValueError) as exc:
             self.log_line(f"In-place write failed: {exc}", "bold red")
             return
         self.log_line(f"wrote in-place; backup: {backup}", "bold green")

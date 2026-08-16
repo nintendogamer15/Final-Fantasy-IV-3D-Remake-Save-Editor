@@ -6,12 +6,13 @@ This tool is pretty much all AI generated, besides what was taken from the repo 
 I'm not a programmer, and the code is probably a giant mess, but it works. KingCyrus20's editor stopped working because an update to the game in 2020 changed how saves work. There are now (I think) multiple checksums that need to be validated. By bouncing some saves around several AI agents and doing some trial and error testing, they seem to have cracked it. I left their explanation for how all that works in the file titled FFIV_3D_CHECKSUM_ISSUE_EXPLAINED.
 Anyway, I'll let Jippity take it from here.
 
+## Features
 
-`ffiv3d_save_tool.py` is a standalone Python 3 command-line utility for the PC/GOG/Steam **Final Fantasy IV 3D Remake** `SAVE.BIN` format.
+This project provides point-and-click GUI, interactive terminal, and command-line
+editors for the PC/GOG/Steam **Final Fantasy IV 3D Remake** `SAVE.BIN` format.
 
 It was built for the post-2020 save format where older save editors can still modify values, but edited saves fail validation unless the newer checksum behavior is repaired.
 
-## Features
 
 
 <img width="1382" height="825" alt="image" src="https://github.com/user-attachments/assets/ed38a0ce-29a9-4f4d-8bc5-38cfb2060302" />
@@ -35,12 +36,50 @@ It was built for the post-2020 save format where older save editors can still mo
 - Python 3.10 or newer recommended.
 - No third-party Python packages for the CLI tool itself.
 - The optional TUI (below) needs the third-party `textual` package.
+- The desktop GUI needs `pyside6-essentials` (Qt).
 
 Check Python:
 
 ```bash
 python3 --version
 ```
+
+Install every interface from a checkout:
+
+```bash
+pip install ".[tui,gui]"
+```
+
+For only one interface, use `pip install .`, `pip install ".[tui]"`, or
+`pip install ".[gui]"`.
+
+## GUI (desktop application)
+
+`ffiv3d_save_gui.py` is the primary point-and-click interface. It uses the same
+PySide6/Qt Fusion framework as the FFIX Save Editor, including native file
+dialogs, reliable high-DPI scaling, dark and light themes, and portable Windows
+and Linux packaging.
+
+```bash
+python3 ffiv3d_save_gui.py [path/to/SAVE.BIN]
+```
+
+The GUI provides:
+
+- Tabs for slots 1, 2, and 3 with checksum status, current-party stats, and the
+  complete inventory.
+- Synchronized slot tabs and edit targeting, including an "all occupied slots"
+  option.
+- Every editing action exposed by the TUI: max party/roster, items, gear,
+  everything, tested late-game equipment, and checksum-only repair.
+- An editable item/gear picker and bounded quantity control.
+- Transactional in-memory edits: a failed operation does not leave half an edit
+  applied.
+- Atomic "Write New File" output and in-place writes with non-overwriting
+  `.bak`, `.bak.1`, `.bak.2`, ... backups.
+
+The redundant copy at `0xB940` is summarized in the sidebar but is handled
+automatically by the existing core targeting logic.
 
 ## TUI (interactive terminal UI)
 
@@ -68,7 +107,7 @@ Run it:
 python3 ffiv3d_save_tui.py SAVE.BIN
 ```
 
-or launch it first and type/browse to a path inside the app:
+or launch it first and type a path inside the app:
 
 ```bash
 python3 ffiv3d_save_tui.py
@@ -142,6 +181,42 @@ The script creates a backup first:
 ```text
 SAVE.BIN.bak
 ```
+
+The GUI preserves older backups by numbering new ones. The current CLI and TUI
+still use a single `.bak` path and may replace an older backup; see the known
+issues reported during the GUI/release review before relying on their in-place
+mode repeatedly.
+
+## Portable builds and releases
+
+The [Releases page](../../releases) provides three assets for each version tag:
+
+- `FFIV3DSaveEditor-vX.Y.Z-windows.exe`
+- `FFIV3DSaveEditor-vX.Y.Z-linux-x86_64.AppImage`
+- `ffiv3d-save-editor-vX.Y.Z-source.zip`
+
+The Windows EXE and Linux AppImage contain the PySide6 GUI and do not require a
+separate Python installation. Windows builds are unsigned, so SmartScreen may
+show a warning on first launch.
+
+GitHub Actions supports two paths:
+
+- A manual **Portable Builds and Release** run builds downloadable workflow
+  artifacts for testing but does not publish a GitHub Release.
+- Pushing a `v*` tag runs tests, builds on native Windows and Linux runners, and
+  publishes both binaries plus the tracked-source ZIP.
+
+Local build instructions are in [`windows/README.md`](windows/README.md) and
+[`linux/README.md`](linux/README.md).
+
+## Tests
+
+```bash
+python -m unittest discover -v
+```
+
+All committed tests create synthetic 65,536-byte saves in memory. No player
+save is required or redistributed.
 
 ## Slot targeting
 

@@ -34,14 +34,19 @@ Typical usage:
 from __future__ import annotations
 
 import argparse
-import shutil
+import os
+import stat
 import sys
+import tempfile
 from collections import OrderedDict
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 SAVE_SIZE = 0x10000
+SAVE_COPY_MAGIC = b"cd1000\x00"
 EMPTY_ID = 0xFF9D
+MIN_QUANTITY = 1
+MAX_QUANTITY = 99
 CHECKSUM_CONST = 0x010FC266
 VISIBLE_SLOT_BASES = {1: 0x0000, 2: 0x3DC0, 3: 0x7B80}
 REDUNDANT_COPY_BASE = 0xB940
@@ -374,6 +379,107 @@ def validate_save_size(data: bytes | bytearray) -> None:
         raise ValueError(f"Unexpected file size {len(data)} bytes; expected {SAVE_SIZE} / 0x{SAVE_SIZE:X}")
 
 
+def validate_save(data: bytes | bytearray) -> None:
+    """Reject files that cannot plausibly be an FFIV 3D ``SAVE.BIN``.
+
+    Checksums are deliberately not required to be valid because repairing a
+    damaged checksum is one of this tool's jobs. At least one known copy region
+    must still contain the observed save-copy signature.
+    """
+    validate_save_size(data)
+    bases = (*VISIBLE_SLOT_BASES.values(), REDUNDANT_COPY_BASE)
+    if not any(data[base:base + len(SAVE_COPY_MAGIC)] == SAVE_COPY_MAGIC for base in bases):
+        raise ValueError(
+            "No FFIV 3D save-copy header was found at any known slot offset; "
+            "refusing to edit this file"
+        )
+
+
+def validate_quantity(quantity: int) -> int:
+    if isinstance(quantity, bool) or not isinstance(quantity, int):
+        raise ValueError("Quantity must be an integer from 1 through 99")
+    if not MIN_QUANTITY <= quantity <= MAX_QUANTITY:
+        raise ValueError(
+            f"Quantity must be from {MIN_QUANTITY} through {MAX_QUANTITY}; got {quantity}"
+        )
+    return quantity
+
+
+def validate_item_id(item_id: int) -> int:
+    if isinstance(item_id, bool) or not isinstance(item_id, int):
+        raise ValueError("Item ID must be an integer in the 16-bit range")
+    if not 1 <= item_id <= 0xFFFF or item_id == EMPTY_ID:
+        raise ValueError(f"Item ID 0x{item_id:X} is not a usable 16-bit item ID")
+    return item_id
+
+
+def same_path(first: Path, second: Path) -> bool:
+    """Compare existing or not-yet-created paths without requiring either one."""
+    first = Path(first)
+    second = Path(second)
+    try:
+        return first.samefile(second)
+    except (FileNotFoundError, OSError):
+        return first.resolve() == second.resolve()
+
+
+def atomic_write(path: Path, contents: bytes | bytearray) -> None:
+    """Replace ``path`` only after a complete write and filesystem flush."""
+    path = Path(path)
+    fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    temp_path = Path(temp_name)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(contents)
+            stream.flush()
+            os.fsync(stream.fileno())
+        if path.exists():
+            os.chmod(temp_path, stat.S_IMODE(path.stat().st_mode))
+        os.replace(temp_path, path)
+    except BaseException:
+        try:
+            temp_path.unlink()
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def available_backup_path(path: Path) -> Path:
+    path = Path(path)
+    first = path.with_suffix(path.suffix + ".bak")
+    if not first.exists():
+        return first
+    index = 1
+    while True:
+        candidate = path.with_suffix(path.suffix + f".bak.{index}")
+        if not candidate.exists():
+            return candidate
+        index += 1
+
+
+def write_new_save(input_path: Path, output_path: Path, contents: bytes | bytearray) -> None:
+    """Atomically write a new save, refusing to overwrite the loaded input."""
+    input_path = Path(input_path)
+    output_path = Path(output_path)
+    if same_path(input_path, output_path):
+        raise ValueError(
+            "Output path is the loaded input file; use in-place mode for a backed-up overwrite"
+        )
+    atomic_write(output_path, contents)
+
+
+def write_in_place_with_backup(path: Path, contents: bytes | bytearray) -> Path:
+    """Atomically replace a save after preserving a never-overwritten backup."""
+    path = Path(path)
+    if path.is_symlink():
+        path = path.resolve(strict=True)
+    original = path.read_bytes()
+    backup = available_backup_path(path)
+    atomic_write(backup, original)
+    atomic_write(path, contents)
+    return backup
+
+
 def checksum_for_copy(data: bytes | bytearray, base: int) -> int:
     total = 0
     for off in range(base + BODY_START_REL, base + BODY_END_REL, 4):
@@ -422,7 +528,7 @@ def slot_label_for_base(base: int) -> str:
 
 
 def slot_looks_occupied(data: bytes | bytearray, base: int) -> bool:
-    if data[base:base + 7] != b"cd1000\x00":
+    if data[base:base + len(SAVE_COPY_MAGIC)] != SAVE_COPY_MAGIC:
         return False
     stored = u32(data, base + CHECKSUM_REL)
     if stored != INACTIVE_CHECKSUM_SENTINEL and stored == checksum_for_copy(data, base):
@@ -614,14 +720,29 @@ def write_inventory_entries(data: bytearray, copy_base: int, entries: list[tuple
 
 
 def upsert_inventory(data: bytearray, additions: Iterable[int], *, quantity: int = 99, bases: Iterable[int] | None = None) -> None:
-    additions = list(OrderedDict.fromkeys(additions))
-    for base in (list(bases) if bases is not None else ACTIVE_COPY_BASES):
+    quantity = validate_quantity(quantity)
+    additions = list(OrderedDict.fromkeys(validate_item_id(item_id) for item_id in additions))
+    target_bases = list(bases) if bases is not None else list(ACTIVE_COPY_BASES)
+
+    # Build every target inventory first. A capacity error on a later copy must
+    # not leave an earlier copy modified.
+    replacements: dict[int, list[tuple[int, int]]] = {}
+    for base in target_bases:
         ordered = OrderedDict()
         for item_id, qty in inventory_entries(data, base):
             ordered[item_id] = max(qty, 0)
         for item_id in additions:
             ordered[item_id] = max(ordered.get(item_id, 0), quantity)
-        write_inventory_entries(data, base, list(ordered.items()))
+        entries = list(ordered.items())
+        if len(entries) > INVENTORY_CAPACITY:
+            raise ValueError(
+                f"Inventory at {slot_label_for_base(base)} would have {len(entries)} entries; "
+                f"capacity appears to be {INVENTORY_CAPACITY}"
+            )
+        replacements[base] = entries
+
+    for base, entries in replacements.items():
+        write_inventory_entries(data, base, entries)
 
 
 def resolve_item_id(token: str) -> int:
@@ -629,9 +750,11 @@ def resolve_item_id(token: str) -> int:
     if not t:
         raise ValueError("empty item token")
     try:
-        return int(t, 0)
+        numeric_id = int(t, 0)
     except ValueError:
         pass
+    else:
+        return validate_item_id(numeric_id)
     key = t.lower()
     if key in NAME_TO_ID:
         return NAME_TO_ID[key]
@@ -662,10 +785,12 @@ def write_equipment(data: bytearray, copy_base: int, roster_index: int, *, right
 
 
 def equip_best_final_party(data: bytearray, bases: Iterable[int]) -> list[str]:
+    bases = list(bases)
+    candidate = bytearray(data)
     changed = []
     gear_to_add = []
     for base in bases:
-        party = set(detected_party_indices(data, base))
+        party = set(detected_party_indices(candidate, base))
         for idx, loadout in FINAL_PARTY_LOADOUT_BY_ROSTER_INDEX.items():
             if idx not in party:
                 continue
@@ -673,7 +798,7 @@ def equip_best_final_party(data: bytearray, bases: Iterable[int]) -> list[str]:
                 name = loadout.get(field)
                 if name:
                     gear_to_add.append(resolve_item_id(name))
-            write_equipment(data, base, idx,
+            write_equipment(candidate, base, idx,
                             right=loadout.get("right"),
                             left=(loadout.get("left") if loadout.get("left") is not None else None),
                             head=loadout.get("head"),
@@ -683,7 +808,8 @@ def equip_best_final_party(data: bytearray, bases: Iterable[int]) -> list[str]:
             if label not in changed:
                 changed.append(label)
     if gear_to_add:
-        upsert_inventory(data, gear_to_add, quantity=1, bases=bases)
+        upsert_inventory(candidate, gear_to_add, quantity=1, bases=bases)
+    data[:] = candidate
     return changed
 
 
@@ -723,6 +849,19 @@ def list_known_items(filter_text: str | None) -> None:
             print(f"0x{item_id:04X}  {name}")
 
 
+def quantity_argument(token: str) -> int:
+    try:
+        quantity = int(token, 10)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            "Quantity must be an integer from 1 through 99"
+        ) from exc
+    try:
+        return validate_quantity(quantity)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="FFIV 3D Remake SAVE.BIN checksum/editor helper")
     p.add_argument("save", nargs="?", help="Path to SAVE.BIN")
@@ -741,7 +880,13 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--give-everything", action="store_true", help="Shortcut for --give-all-items --give-all-gear")
     p.add_argument("--add-item", action="append", default=[], metavar="NAME_OR_0xID", help="Add one known item/gear by exact/partial name or hex ID. Repeatable")
     p.add_argument("--equip-best", action="store_true", help="Equip tested strong gear for late-game party rows Rydia/Cecil/Kain/Rosa/Edge if present")
-    p.add_argument("--quantity", type=int, default=99, help="Quantity for added inventory items/gear, default 99")
+    p.add_argument(
+        "--quantity",
+        type=quantity_argument,
+        default=99,
+        metavar="1-99",
+        help="Quantity for added inventory items/gear, default 99",
+    )
     p.add_argument("--out", help="Write edited save to this path")
     p.add_argument("--in-place", action="store_true", help="Overwrite input save after creating a .bak backup")
     p.add_argument("--list-known", nargs="?", const="", metavar="FILTER", help="List known item/gear IDs, optionally filtered")
@@ -749,7 +894,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = parse_args(argv or sys.argv[1:])
+    args = parse_args(argv if argv is not None else sys.argv[1:])
 
     if args.list_known is not None:
         list_known_items(args.list_known)
@@ -759,9 +904,20 @@ def main(argv: list[str] | None = None) -> int:
         print("error: SAVE.BIN path required unless using --list-known", file=sys.stderr)
         return 2
 
+    if args.in_place and args.out:
+        print("error: use either --in-place or --out, not both", file=sys.stderr)
+        return 2
+
     path = Path(args.save)
-    data = bytearray(path.read_bytes())
-    validate_save_size(data)
+    try:
+        data = bytearray(path.read_bytes())
+        validate_save(data)
+    except OSError as exc:
+        print(f"error: could not read {path}: {exc}", file=sys.stderr)
+        return 1
+    except ValueError as exc:
+        print(f"error: not a valid SAVE.BIN: {exc}", file=sys.stderr)
+        return 2
 
     try:
         target_bases = select_copy_bases(data, args.slot)
@@ -770,61 +926,82 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     changed = False
+    edit_requested = any(
+        (
+            args.fix_checksum,
+            args.max_party,
+            args.max_all_chars,
+            args.give_all_items,
+            args.give_all_gear,
+            args.give_everything,
+            args.add_item,
+            args.equip_best,
+        )
+    )
+    try:
+        if args.inspect_all:
+            inspect(data)
+        elif args.inspect or not edit_requested:
+            inspect(data, target_bases)
 
-    if args.inspect_all:
-        inspect(data)
-    elif args.inspect or not any((args.fix_checksum, args.max_party, args.max_all_chars, args.give_all_items,
-                                  args.give_all_gear, args.give_everything, args.add_item, args.equip_best)):
-        inspect(data, target_bases)
+        if args.max_party:
+            by_base = max_party(data, target_bases)
+            summary = "; ".join(f"{slot_label_for_base(base)}={rows}" for base, rows in by_base.items())
+            print(f"maxed current-party roster rows: {summary}")
+            changed = True
 
-    if args.max_party:
-        by_base = max_party(data, target_bases)
-        summary = "; ".join(f"{slot_label_for_base(base)}={rows}" for base, rows in by_base.items())
-        print(f"maxed current-party roster rows: {summary}")
-        changed = True
+        if args.max_all_chars:
+            by_base = max_all_chars(data, target_bases)
+            summary = "; ".join(f"{slot_label_for_base(base)}={rows}" for base, rows in by_base.items())
+            print(f"maxed non-empty roster rows: {summary}")
+            changed = True
 
-    if args.max_all_chars:
-        by_base = max_all_chars(data, target_bases)
-        summary = "; ".join(f"{slot_label_for_base(base)}={rows}" for base, rows in by_base.items())
-        print(f"maxed non-empty roster rows: {summary}")
-        changed = True
+        additions = []
+        if args.give_all_items or args.give_everything:
+            additions.extend(ITEMS.keys())
+        if args.give_all_gear or args.give_everything:
+            additions.extend(ALL_GEAR.keys())
+        for token in args.add_item:
+            additions.append(resolve_item_id(token))
+        if additions:
+            upsert_inventory(data, additions, quantity=args.quantity, bases=target_bases)
+            labels = ", ".join(slot_label_for_base(base) for base in target_bases)
+            print(
+                f"added/updated {len(set(additions))} inventory entries "
+                f"to quantity >= {args.quantity} in {labels}"
+            )
+            changed = True
 
-    additions = []
-    if args.give_all_items or args.give_everything:
-        additions.extend(ITEMS.keys())
-    if args.give_all_gear or args.give_everything:
-        additions.extend(ALL_GEAR.keys())
-    for token in args.add_item:
-        additions.append(resolve_item_id(token))
-    if additions:
-        upsert_inventory(data, additions, quantity=args.quantity, bases=target_bases)
-        print(f"added/updated {len(set(additions))} inventory entries to quantity >= {args.quantity} in {', '.join(slot_label_for_base(b) for b in target_bases)}")
-        changed = True
+        if args.equip_best:
+            chars = equip_best_final_party(data, target_bases)
+            equipped = ", ".join(chars) if chars else "no matching late-game party rows detected"
+            print(f"equipped tested strong gear for: {equipped}")
+            changed = True
 
-    if args.equip_best:
-        chars = equip_best_final_party(data, target_bases)
-        print(f"equipped tested strong gear for: {', '.join(chars) if chars else 'no matching late-game party rows detected'}")
-        changed = True
-
-    if args.fix_checksum or changed:
-        fix_checksums(data, target_bases)
-        print(f"fixed checksums for: {', '.join(slot_label_for_base(b) for b in target_bases)}")
-        changed = True
+        if args.fix_checksum or changed:
+            fix_checksums(data, target_bases)
+            print(f"fixed checksums for: {', '.join(slot_label_for_base(b) for b in target_bases)}")
+            changed = True
+    except (IndexError, KeyError, OverflowError, TypeError, ValueError) as exc:
+        print(f"error: edit failed: {exc}", file=sys.stderr)
+        return 2
 
     if changed:
-        if args.in_place and args.out:
-            print("error: use either --in-place or --out, not both", file=sys.stderr)
+        try:
+            if args.in_place:
+                backup = write_in_place_with_backup(path, data)
+                print(f"wrote in-place; backup: {backup}")
+            else:
+                out = Path(args.out) if args.out else path.with_name(path.stem + ".edited" + path.suffix)
+                write_new_save(path, out, data)
+                print(f"wrote: {out}")
+                print("Copy/rename that file to SAVE.BIN when you are ready to test it.")
+        except OSError as exc:
+            print(f"error: could not write save: {exc}", file=sys.stderr)
+            return 1
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
             return 2
-        if args.in_place:
-            backup = path.with_suffix(path.suffix + ".bak")
-            shutil.copy2(path, backup)
-            path.write_bytes(data)
-            print(f"wrote in-place; backup: {backup}")
-        else:
-            out = Path(args.out) if args.out else path.with_name(path.stem + ".edited" + path.suffix)
-            out.write_bytes(data)
-            print(f"wrote: {out}")
-            print("Copy/rename that file to SAVE.BIN when you are ready to test it.")
 
     return 0
 

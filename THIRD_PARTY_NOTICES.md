@@ -39,3 +39,19 @@ licenses/MIT.txt                supplemental permissive grant for separable orig
 ```
 
 The LGPL-covered upstream-derived portions cannot be relicensed as purely permissive by this project. For maximum freedom where allowed, separable original project-specific contributions are additionally made available under MIT as described in `ADDITIONAL_PERMISSIONS.md`.
+
+## Python and build dependencies
+
+- [Textual](https://github.com/Textualize/textual), MIT License, provides the
+  optional terminal UI.
+- [PySide6](https://doc.qt.io/qtforpython/), LGPL-3.0, provides the Qt desktop
+  GUI. The project uses the smaller `pyside6-essentials` distribution.
+- [PyInstaller](https://github.com/pyinstaller/pyinstaller), GPL-2.0-or-later
+  with its exception for distributing bundled applications, creates the
+  portable executables.
+- [appimagetool](https://github.com/AppImage/appimagetool), MIT License,
+  packages the Linux build as an AppImage.
+
+PyInstaller and appimagetool are build-time tools. Their source is not copied
+into this repository. PySide6 remains replaceable by running the editor from
+source with a different compatible PySide6 installation.

@@ -7,23 +7,64 @@ __pycache__/
 .venv/
 venv/
 .env
+.env.*
+!.env.example
 .vendor/
+build/
+dist/
+*.egg-info/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Local save files and backups
-*.BIN
-*.bin
+*.[Bb][Ii][Nn]
+*.[Ss][Aa][Vv]
+*.[Ss][Rr][Mm]
+*.[Mm][Cc][Rr]
+*.[Pp][Ss][Vv]
+*.[Pp][Ss][Uu]
+*.[Mm][Aa][Xx]
 *.bak
+*.bak.*
 *.backup
-SAVE*.BIN
-SAVE*.bin
+
+# Credentials and signing material must never enter source archives
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa
+id_ed25519
+credentials.json
+secrets.json
 
 # Archives / generated output
 *.zip
 *.tar.gz
 *.7z
+*.log
 
 # OS/editor noise
 .DS_Store
 Thumbs.db
 .idea/
 .vscode/
+
+# Portable build artifacts
+windows/.buildenv/
+windows/build/
+windows/dist/
+windows/build.log
+linux/.buildenv/
+linux/.mamba_root/
+linux/build/
+linux/dist/
+linux/AppDir/
+linux/micromamba
+linux/appimagetool
+linux/.appimagetool-extracted/
+linux/*.AppImage
