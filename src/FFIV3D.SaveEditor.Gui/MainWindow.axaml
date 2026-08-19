@@ -1,0 +1,107 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FFIV3D.SaveEditor.Gui.ViewModels"
+        x:Class="FFIV3D.SaveEditor.Gui.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="Final Fantasy IV 3D Remake Save Editor"
+        Icon="avares://FFIV3DSaveEditor/Assets/icon.png"
+        Width="1280" Height="860" MinWidth="960" MinHeight="680">
+  <Grid RowDefinitions="Auto,*,Auto,Auto" Margin="12">
+    <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="8" Margin="0,0,0,10">
+      <TextBlock Grid.Column="0" Text="Save file" VerticalAlignment="Center" />
+      <TextBox Grid.Column="1" x:Name="PathBox" PlaceholderText="Path to SAVE.BIN" />
+      <Button Grid.Column="2" Content="Browse…" Click="BrowseInput" />
+      <Button Grid.Column="3" Content="Load" Click="LoadFile" />
+      <Button Grid.Column="4" Content="Toggle Theme" Click="ToggleTheme" />
+    </Grid>
+
+    <Grid Grid.Row="1" ColumnDefinitions="300,*" ColumnSpacing="12">
+      <Border Grid.Column="0" BorderThickness="1" BorderBrush="{DynamicResource ThemeBorderLowBrush}"
+              CornerRadius="6" Padding="12">
+        <ScrollViewer>
+          <StackPanel Spacing="8">
+            <TextBlock Text="Target and actions" FontWeight="SemiBold" FontSize="16" />
+            <TextBlock Text="Target slot" />
+            <ComboBox ItemsSource="{Binding Targets}" SelectedItem="{Binding SelectedTarget}"
+                      DisplayMemberBinding="{Binding Label}" />
+            <Button Content="Inspect / Refresh" Click="RefreshView" />
+            <Button Content="Max Current Party" Click="MaxParty" />
+            <Button Content="Max All Roster Rows" Click="MaxAll" />
+            <Button Content="Give All Items" Click="GiveItems" />
+            <Button Content="Give All Gear" Click="GiveGear" />
+            <Button Content="Give Everything" Click="GiveEverything" />
+            <Button Content="Equip Best (late-game)" Click="EquipBest" />
+            <Button Content="Fix Checksum Only" Click="FixChecksum" />
+
+            <Separator Margin="0,6" />
+            <TextBlock Text="Add item / gear" FontWeight="SemiBold" />
+            <ComboBox x:Name="KnownItemCombo" ItemsSource="{Binding KnownItems}"
+                      SelectionChanged="KnownItemSelected" PlaceholderText="Pick from list…" />
+            <TextBox x:Name="ItemBox" PlaceholderText="Name or 0xID" />
+            <Grid ColumnDefinitions="Auto,90,*" ColumnSpacing="8">
+              <TextBlock Text="Quantity" VerticalAlignment="Center" />
+              <NumericUpDown Grid.Column="1" x:Name="QuantityBox" Minimum="1" Maximum="99" Value="99" />
+              <Button Grid.Column="2" Content="Add Item" Click="AddItem" />
+            </Grid>
+            <TextBlock Text="{Binding RedundantSummary}" TextWrapping="Wrap" Opacity="0.75" Margin="0,8,0,0" />
+          </StackPanel>
+        </ScrollViewer>
+      </Border>
+
+      <TabControl Grid.Column="1" ItemsSource="{Binding Copies}" SelectedItem="{Binding SelectedCopy}">
+        <TabControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:SlotViewModel">
+            <TextBlock Text="{Binding Label}" />
+          </DataTemplate>
+        </TabControl.ItemTemplate>
+        <TabControl.ContentTemplate>
+          <DataTemplate x:DataType="vm:SlotViewModel">
+            <Grid RowDefinitions="Auto,Auto,*,Auto,*" RowSpacing="7" Margin="8">
+              <TextBlock Grid.Row="0" Text="{Binding Status}" TextWrapping="Wrap" />
+              <TextBlock Grid.Row="1" Text="Current party" FontWeight="SemiBold" />
+              <DataGrid Grid.Row="2" ItemsSource="{Binding Party}" IsReadOnly="True" AutoGenerateColumns="False"
+                        GridLinesVisibility="Horizontal" CanUserResizeColumns="True">
+                <DataGrid.Columns>
+                  <DataGridTextColumn Header="Roster #" Binding="{Binding RosterIndex}" />
+                  <DataGridTextColumn Header="Level" Binding="{Binding Level}" />
+                  <DataGridTextColumn Header="Current HP" Binding="{Binding CurrentHp}" />
+                  <DataGridTextColumn Header="Max HP" Binding="{Binding MaximumHp}" />
+                  <DataGridTextColumn Header="Current MP" Binding="{Binding CurrentMp}" />
+                  <DataGridTextColumn Header="Max MP" Binding="{Binding MaximumMp}" />
+                  <DataGridTextColumn Header="STR" Binding="{Binding Strength}" />
+                  <DataGridTextColumn Header="STA" Binding="{Binding Stamina}" />
+                  <DataGridTextColumn Header="SPD" Binding="{Binding Speed}" />
+                  <DataGridTextColumn Header="INT" Binding="{Binding Intellect}" />
+                  <DataGridTextColumn Header="SPI" Binding="{Binding Spirit}" />
+                </DataGrid.Columns>
+              </DataGrid>
+              <TextBlock Grid.Row="3" Text="Inventory" FontWeight="SemiBold" />
+              <DataGrid Grid.Row="4" ItemsSource="{Binding Inventory}" IsReadOnly="True" AutoGenerateColumns="False"
+                        GridLinesVisibility="Horizontal">
+                <DataGrid.Columns>
+                  <DataGridTextColumn Header="ID" Binding="{Binding ItemId, StringFormat=0x{0:X4}}" />
+                  <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*" />
+                  <DataGridTextColumn Header="Quantity" Binding="{Binding Quantity}" />
+                </DataGrid.Columns>
+              </DataGrid>
+            </Grid>
+          </DataTemplate>
+        </TabControl.ContentTemplate>
+      </TabControl>
+    </Grid>
+
+    <Border Grid.Row="2" BorderThickness="1" BorderBrush="{DynamicResource ThemeBorderLowBrush}"
+            CornerRadius="6" Padding="10" Margin="0,10,0,8">
+      <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="8">
+        <TextBlock Text="Output" VerticalAlignment="Center" />
+        <TextBox Grid.Column="1" x:Name="OutputBox" PlaceholderText="Blank creates SAVE.edited.BIN beside the input" />
+        <Button Grid.Column="2" Content="Browse…" Click="BrowseOutput" />
+        <Button Grid.Column="3" Content="Write New File" Click="WriteNew" />
+        <Button Grid.Column="4" Content="Write In-Place" Click="WriteInPlace" />
+      </Grid>
+    </Border>
+
+    <TextBox Grid.Row="3" Text="{Binding Log}" IsReadOnly="True" AcceptsReturn="True"
+             Height="105" TextWrapping="Wrap" ScrollViewer.VerticalScrollBarVisibility="Auto" />
+  </Grid>
+</Window>

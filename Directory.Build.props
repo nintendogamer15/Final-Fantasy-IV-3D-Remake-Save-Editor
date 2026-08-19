@@ -1,0 +1,15 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+    <Version>0.6.0</Version>
+    <Authors>FFIV 3D Save Editor contributors</Authors>
+    <Copyright>Copyright (c) 2026 FFIV 3D Save Editor contributors</Copyright>
+    <PackageLicenseExpression>LGPL-3.0-or-later</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/nintendogamer15/Final-Fantasy-IV-3D-Remake-Save-Editor</RepositoryUrl>
+  </PropertyGroup>
+</Project>

@@ -37,20 +37,19 @@ Body length:
     0x3DC0 - 0x20 = 0x3DA0 bytes
     0x3DA0 / 4 = 3944 little-endian u32 words
 
-Python reference implementation:
+C# reference implementation:
 
-    def u32le(data, off):
-        return int.from_bytes(data[off:off + 4], "little")
+    static uint CalculateChecksum(ReadOnlySpan<byte> data, int copyBase)
+    {
+        uint total = 0;
+        for (var offset = copyBase + 0x20; offset < copyBase + 0x3DC0; offset += 4)
+            total = unchecked(total + BinaryPrimitives.ReadUInt32LittleEndian(data[offset..]));
+        return unchecked(total + 0x010FC266);
+    }
 
-    def calc_checksum(data, base):
-        total = 0
-        for off in range(base + 0x20, base + 0x3DC0, 4):
-            total = (total + u32le(data, off)) & 0xFFFFFFFF
-        return (total + 0x010FC266) & 0xFFFFFFFF
-
-    def write_checksum(data, base):
-        ck = calc_checksum(data, base)
-        data[base + 0x1C : base + 0x20] = ck.to_bytes(4, "little")
+    static void WriteChecksum(Span<byte> data, int copyBase) =>
+        BinaryPrimitives.WriteUInt32LittleEndian(data[(copyBase + 0x1C)..],
+            CalculateChecksum(data, copyBase));
 
 Observed proof values
 ---------------------
@@ -385,7 +384,7 @@ The old public FFIV-Save-Editor remains useful because it documented or encoded 
     item IDs
     equipment IDs
 
-The current Python tool adds:
+The current .NET tool adds:
 
     post-2020 checksum calculation
     redundant-copy handling at 0xB940

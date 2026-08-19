@@ -1,111 +1,40 @@
-name: Portable Builds and Release
+name: Build and release
 
-# A manual run builds downloadable workflow artifacts for testing without
-# publishing a release. Pushing a v* tag builds the same artifacts and then
-# publishes Windows, AppImage, and source ZIP assets on GitHub Releases.
 on:
   push:
-    tags:
-      - "v*"
+    tags: ["v*"]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    env:
-      QT_QPA_PLATFORM: offscreen
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.11"
-          cache: pip
-      - name: Install Qt runtime libraries
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libegl1 libgl1 libxkbcommon0
-      - name: Install project and test dependencies
-        run: python -m pip install ".[tui,gui]"
-      - name: Compile source
-        run: python -m compileall -q ffiv3d_save_tool.py ffiv3d_save_tui.py ffiv3d_save_gui.py tests
-      - name: Run tests
-        run: python -m unittest discover -v
-
-  build-windows:
-    needs: test
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.11"
-          cache: pip
-      - name: Install build dependencies
-        run: python -m pip install pyinstaller pyside6-essentials
-      - name: Build FFIV3DSaveEditor.exe
-        working-directory: windows
-        run: python -m PyInstaller --noconfirm --clean FFIV3DSaveEditor.spec
-      - uses: actions/upload-artifact@v7
-        with:
-          name: windows-exe
-          path: windows/dist/FFIV3DSaveEditor.exe
-          if-no-files-found: error
-
-  build-linux:
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - name: Install portable GUI runtime libraries
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libegl1 libgl1 libxkbcommon0
-      - name: Build AppImage
-        working-directory: linux
-        run: |
-          chmod +x build.sh
-          ./build.sh
-      - uses: actions/upload-artifact@v7
-        with:
-          name: linux-appimage
-          path: linux/FFIV3DSaveEditor-x86_64.AppImage
-          if-no-files-found: error
-
-  build-source-zip:
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - name: Archive tracked source as a ZIP
-        run: git archive --format=zip -o ffiv3d-save-editor-source.zip HEAD
-      - uses: actions/upload-artifact@v7
-        with:
-          name: source-zip
-          path: ffiv3d-save-editor-source.zip
-          if-no-files-found: error
-
-  publish-release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [build-windows, build-linux, build-source-zip]
+  build:
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
         with:
-          path: artifacts
-      - name: Rename release assets
-        run: |
-          version="${GITHUB_REF_NAME}"
-          mkdir -p out
-          cp "artifacts/windows-exe/FFIV3DSaveEditor.exe" "out/FFIV3DSaveEditor-${version}-windows.exe"
-          cp "artifacts/linux-appimage/FFIV3DSaveEditor-x86_64.AppImage" "out/FFIV3DSaveEditor-${version}-linux-x86_64.AppImage"
-          cp "artifacts/source-zip/ffiv3d-save-editor-source.zip" "out/ffiv3d-save-editor-${version}-source.zip"
-      - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v3
+          dotnet-version: "10.0.x"
+      - name: Restore
+        run: dotnet restore FFIV3D.SaveEditor.slnx
+      - name: Test
+        run: dotnet test FFIV3D.SaveEditor.slnx --configuration Release --no-restore
+      - name: Publish Windows and Linux from Linux
+        env:
+          RELEASE_LABEL: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('manual-{0}', github.run_number) }}
+        run: ./scripts/build-release.sh "$RELEASE_LABEL" "$RUNNER_TEMP/release"
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
         with:
-          files: out/*
+          name: FFIV3DSaveEditor-build-${{ github.run_number }}
+          path: ${{ runner.temp }}/release/*
+          if-no-files-found: error
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ runner.temp }}/release/*
           generate_release_notes: true

@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>FFIV3DSaveEditor.Cli</AssemblyName>
+    <RootNamespace>FFIV3D.SaveEditor.Cli</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../FFIV3D.SaveEditor.Core/FFIV3D.SaveEditor.Core.csproj" />
+  </ItemGroup>
+</Project>

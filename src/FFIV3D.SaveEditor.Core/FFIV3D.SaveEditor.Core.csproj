@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>FFIV3D.SaveEditor.Core</AssemblyName>
+    <RootNamespace>FFIV3D.SaveEditor.Core</RootNamespace>
+    <Description>Binary format and safe editing library for Final Fantasy IV 3D Remake saves.</Description>
+  </PropertyGroup>
+</Project>

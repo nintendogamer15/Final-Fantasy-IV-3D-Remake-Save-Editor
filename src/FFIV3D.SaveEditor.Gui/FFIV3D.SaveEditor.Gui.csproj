@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>FFIV3DSaveEditor</AssemblyName>
+    <RootNamespace>FFIV3D.SaveEditor.Gui</RootNamespace>
+    <ApplicationTitle>Final Fantasy IV 3D Remake Save Editor</ApplicationTitle>
+    <ApplicationIcon>../../assets/icon.ico</ApplicationIcon>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <PublishTrimmed>false</PublishTrimmed>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Controls.DataGrid" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.1" />
+    <ProjectReference Include="../FFIV3D.SaveEditor.Core/FFIV3D.SaveEditor.Core.csproj" />
+    <AvaloniaResource Include="../../assets/icon.png" Link="Assets/icon.png" />
+  </ItemGroup>
+</Project>

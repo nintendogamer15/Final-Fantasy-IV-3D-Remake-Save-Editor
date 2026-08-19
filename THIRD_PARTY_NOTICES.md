@@ -18,7 +18,7 @@ licenses/FFIV-Save-Editor-LGPL-3.0.txt
 
 The upstream project is a Kotlin/TornadoFX save editor for the PC port of Final Fantasy IV 3D Remake. Its README notes that the original editor became non-functional for current saves due to checksum protection added after a November 2020 update.
 
-This Python project reuses/adapts some non-checksum data from that editor, including save-layout offsets and item/equipment ID mappings. The current Python project adds post-2020 checksum repair, redundant-copy handling, multi-slot targeting, command-line editing, HP/MP source-field handling, and updated technical documentation.
+This C#/.NET project reuses/adapts some non-checksum data from that editor, including save-layout offsets and item/equipment ID mappings. The current project adds post-2020 checksum repair, redundant-copy handling, multi-slot targeting, command-line editing, HP/MP source-field handling, and updated technical documentation.
 
 ## Licensing of this repository
 
@@ -40,18 +40,13 @@ licenses/MIT.txt                supplemental permissive grant for separable orig
 
 The LGPL-covered upstream-derived portions cannot be relicensed as purely permissive by this project. For maximum freedom where allowed, separable original project-specific contributions are additionally made available under MIT as described in `ADDITIONAL_PERMISSIONS.md`.
 
-## Python and build dependencies
+## Runtime and build dependencies
 
-- [Textual](https://github.com/Textualize/textual), MIT License, provides the
-  optional terminal UI.
-- [PySide6](https://doc.qt.io/qtforpython/), LGPL-3.0, provides the Qt desktop
-  GUI. The project uses the smaller `pyside6-essentials` distribution.
-- [PyInstaller](https://github.com/pyinstaller/pyinstaller), GPL-2.0-or-later
-  with its exception for distributing bundled applications, creates the
-  portable executables.
-- [appimagetool](https://github.com/AppImage/appimagetool), MIT License,
-  packages the Linux build as an AppImage.
+- [.NET](https://dotnet.microsoft.com/), MIT License, provides the runtime and
+  SDK. Release executables include the required runtime under Microsoft's .NET
+  distribution terms.
+- [Avalonia UI](https://avaloniaui.net/), MIT License, provides the desktop
+  interface and its DataGrid, Fluent theme, and Inter font packages.
 
-PyInstaller and appimagetool are build-time tools. Their source is not copied
-into this repository. PySide6 remains replaceable by running the editor from
-source with a different compatible PySide6 installation.
+Dependencies are restored from NuGet and are not vendored into this repository.
+Standard .NET RID-specific publishing creates the Windows and Linux releases.

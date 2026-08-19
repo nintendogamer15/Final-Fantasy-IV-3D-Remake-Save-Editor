@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="src/FFIV3D.SaveEditor.Core/FFIV3D.SaveEditor.Core.csproj" />
+  <Project Path="src/FFIV3D.SaveEditor.Cli/FFIV3D.SaveEditor.Cli.csproj" />
+  <Project Path="src/FFIV3D.SaveEditor.Gui/FFIV3D.SaveEditor.Gui.csproj" />
+  <Project Path="tests/FFIV3D.SaveEditor.Tests/FFIV3D.SaveEditor.Tests.csproj" />
+</Solution>
