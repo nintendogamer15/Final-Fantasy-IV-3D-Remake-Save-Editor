@@ -6,7 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Deterministic>true</Deterministic>
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
-    <Version>0.6.2</Version>
+    <Version>0.6.3</Version>
     <Authors>FFIV 3D Save Editor contributors</Authors>
     <Copyright>Copyright (c) 2026 FFIV 3D Save Editor contributors</Copyright>
     <PackageLicenseExpression>LGPL-3.0-or-later</PackageLicenseExpression>

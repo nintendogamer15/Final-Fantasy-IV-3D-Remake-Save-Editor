@@ -1,0 +1,86 @@
+# Maintainer: Robert
+
+pkgname=ffiv3d-save-editor
+pkgver="${PKGVER:-0.0.0}"
+pkgrel=1
+pkgdesc="Final Fantasy IV 3D Remake save editor"
+arch=('x86_64')
+url="https://github.com/nintendogamer15/Final-Fantasy-IV-3D-Remake-Save-Editor"
+license=('LGPL-3.0-or-later')
+depends=(
+  'ca-certificates'
+  'fontconfig'
+  'glibc'
+  'hicolor-icon-theme'
+  'icu'
+  'krb5'
+  'libgcc'
+  'libice'
+  'libsm'
+  'libstdc++'
+  'libx11'
+  'openssl'
+  'tzdata'
+  'ttf-dejavu'
+  'zlib'
+)
+optdepends=('xdg-desktop-portal: native desktop file picker integration')
+checkdepends=('appstream' 'desktop-file-utils')
+options=('!strip' '!debug')
+source=(
+  'app-binary'
+  'ffiv3d-save-editor.desktop'
+  'io.github.nintendogamer15.FFIV3DSaveEditor.metainfo.xml'
+  'icon.png'
+  'LICENSE'
+  'COPYING'
+  'COPYING.LESSER'
+  'ADDITIONAL_PERMISSIONS.md'
+  'THIRD_PARTY_NOTICES.md'
+  'README_LICENSE_SUMMARY.txt'
+  'FFIV-Save-Editor-LGPL-3.0.txt'
+  'MIT.txt'
+)
+sha256sums=(
+  'SKIP'
+  '257d1a7fd80fb724d039e5748cfa35e9b2a13b9ef2dd9241ec8269a5981db33d'
+  'dafc332bee0c8302525b362b0098e43be512f9fd24c82aea427dd535575f0c76'
+  '7dcca4b82a11c314f33c5c1652b9ca38aa8f87887fa1a6900223f29f0c69dbc0'
+  'e3a994d82e644b03a792a930f574002658412f62407f5fee083f2555c5f23118'
+  '3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986'
+  'e3a994d82e644b03a792a930f574002658412f62407f5fee083f2555c5f23118'
+  '2879005916b89fe4cfcaf4d58121db6ad49fe1a783f5af2aea6132eb29717be2'
+  'c6806f76e13788655b29900f65c7235d1860b2f905a9d8345698e499fde1a236'
+  '8851b446d0ba524b50f1815fa3608a13add1fa8bf402288de6c514708af9f036'
+  'e3a994d82e644b03a792a930f574002658412f62407f5fee083f2555c5f23118'
+  '279a0a6b9d4c9ed13e3477b654ee82f5d3c3d562f35bef3862bfc3a5721724fc'
+)
+
+check() {
+  desktop-file-validate "${srcdir}/ffiv3d-save-editor.desktop"
+  appstreamcli validate --no-net "${srcdir}/io.github.nintendogamer15.FFIV3DSaveEditor.metainfo.xml"
+}
+
+package() {
+  install -Dm0755 "${srcdir}/app-binary" "${pkgdir}/usr/bin/ffiv3d-save-editor"
+  install -Dm0644 "${srcdir}/ffiv3d-save-editor.desktop" \
+    "${pkgdir}/usr/share/applications/ffiv3d-save-editor.desktop"
+  install -Dm0644 "${srcdir}/icon.png" \
+    "${pkgdir}/usr/share/icons/hicolor/256x256/apps/ffiv3d-save-editor.png"
+  install -Dm0644 "${srcdir}/io.github.nintendogamer15.FFIV3DSaveEditor.metainfo.xml" \
+    "${pkgdir}/usr/share/metainfo/io.github.nintendogamer15.FFIV3DSaveEditor.metainfo.xml"
+
+  install -Dm0644 "${srcdir}/LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+  install -Dm0644 "${srcdir}/COPYING" "${pkgdir}/usr/share/licenses/${pkgname}/COPYING"
+  install -Dm0644 "${srcdir}/COPYING.LESSER" "${pkgdir}/usr/share/licenses/${pkgname}/COPYING.LESSER"
+  install -Dm0644 "${srcdir}/FFIV-Save-Editor-LGPL-3.0.txt" \
+    "${pkgdir}/usr/share/licenses/${pkgname}/FFIV-Save-Editor-LGPL-3.0.txt"
+  install -Dm0644 "${srcdir}/MIT.txt" "${pkgdir}/usr/share/licenses/${pkgname}/MIT.txt"
+
+  install -Dm0644 "${srcdir}/ADDITIONAL_PERMISSIONS.md" \
+    "${pkgdir}/usr/share/doc/${pkgname}/ADDITIONAL_PERMISSIONS.md"
+  install -Dm0644 "${srcdir}/THIRD_PARTY_NOTICES.md" \
+    "${pkgdir}/usr/share/doc/${pkgname}/THIRD_PARTY_NOTICES.md"
+  install -Dm0644 "${srcdir}/README_LICENSE_SUMMARY.txt" \
+    "${pkgdir}/usr/share/doc/${pkgname}/README_LICENSE_SUMMARY.txt"
+}

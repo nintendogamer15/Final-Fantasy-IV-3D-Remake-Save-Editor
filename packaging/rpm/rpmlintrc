@@ -1,0 +1,10 @@
+# This is a desktop GUI, so a command-line manual page is not useful.
+addFilter(r"no-manual-page-for-binary ffiv3d-save-editor$")
+
+# .NET single-file bundles load these native platform libraries at runtime.
+# RPM's automatic dependency scanner cannot see those dynamic loads.
+addFilter(r"explicit-lib-dependency (krb5-libs|libICE|libSM|libX11|libgcc|libicu|libstdc\+\+|openssl-libs)$")
+
+# All project and upstream license filenames are shipped deliberately, even
+# when their LGPL text is byte-identical.
+addFilter(r"files-duplicate /usr/share/licenses/ffiv3d-save-editor/(LICENSE|COPYING\.LESSER|FFIV-Save-Editor-LGPL-3\.0\.txt) .*$")

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: MIT -->
+<component type="desktop-application">
+  <id>io.github.nintendogamer15.FFIV3DSaveEditor</id>
+  <name>Final Fantasy IV 3D Remake Save Editor</name>
+  <summary>View and safely edit Final Fantasy IV 3D Remake save files</summary>
+  <metadata_license>MIT</metadata_license>
+  <project_license>LGPL-3.0-or-later</project_license>
+  <description>
+    <p>A cross-platform editor for viewing, validating, and safely editing the PC Final Fantasy IV 3D Remake SAVE.BIN format.</p>
+  </description>
+  <developer id="io.github.nintendogamer15">
+    <name>nintendogamer15</name>
+  </developer>
+  <launchable type="desktop-id">ffiv3d-save-editor.desktop</launchable>
+  <provides>
+    <binary>ffiv3d-save-editor</binary>
+  </provides>
+  <url type="homepage">https://github.com/nintendogamer15/Final-Fantasy-IV-3D-Remake-Save-Editor</url>
+  <content_rating type="oars-1.1" />
+</component>

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Final Fantasy IV 3D Remake Save Editor
+Comment=View and safely edit Final Fantasy IV 3D Remake save files
+Exec=ffiv3d-save-editor %f
+Icon=ffiv3d-save-editor
+Terminal=false
+Categories=Game;
+StartupNotify=true
