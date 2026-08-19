@@ -4,6 +4,16 @@ namespace FFIV3D.SaveEditor.Tests;
 
 public sealed class SaveDocumentTests
 {
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData(" \t ")]
+    public void LoadRejectsMissingFileSelection(string? path)
+    {
+        var exception = Assert.Throws<SaveFormatException>(() => FfivSaveDocument.Load(path));
+        Assert.Equal("No save file was selected.", exception.Message);
+    }
+
     [Fact]
     public void SyntheticSaveHasValidChecksums()
     {

@@ -44,7 +44,7 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void LoadFile(object? sender, RoutedEventArgs e) => Open(PathBox.Text ?? string.Empty);
+    private void LoadFile(object? sender, RoutedEventArgs e) => Open(PathBox.Text);
 
     private void ToggleTheme(object? sender, RoutedEventArgs e)
     {
@@ -53,19 +53,27 @@ public sealed partial class MainWindow : Window
                 ? ThemeVariant.Light : ThemeVariant.Dark;
     }
 
-    private void Open(string path)
+    private void Open(string? path)
     {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            Error("Choose a save file before loading.");
+            return;
+        }
+
         try
         {
-            var candidate = FfivSaveDocument.Load(path.Trim());
+            var fullPath = Path.GetFullPath(path.Trim());
+            var candidate = FfivSaveDocument.Load(fullPath);
             _document = candidate;
-            _savePath = Path.GetFullPath(path.Trim());
+            _savePath = fullPath;
             PathBox.Text = _savePath;
             OutputBox.Text = DefaultOutput(_savePath);
             _viewModel.Refresh(candidate);
             _viewModel.AppendLog($"Loaded {_savePath} ({SaveLayout.SaveSize:N0} bytes).");
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SaveFormatException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SaveFormatException
+                                          or ArgumentException or NotSupportedException)
         {
             Error($"Could not open save: {exception.Message}");
         }

@@ -9,7 +9,12 @@ public sealed class FfivSaveDocument
 
     private FfivSaveDocument(byte[] data) => _data = data;
 
-    public static FfivSaveDocument Load(string path) => Parse(File.ReadAllBytes(path));
+    public static FfivSaveDocument Load(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            throw new SaveFormatException("No save file was selected.");
+        return Parse(File.ReadAllBytes(path));
+    }
 
     public static FfivSaveDocument Parse(ReadOnlySpan<byte> source)
     {
