@@ -6,7 +6,7 @@ This tool is pretty much all AI generated, besides what was taken from the repo 
 I'm not a programmer, and the code is probably a giant mess, but it works. KingCyrus20's editor stopped working because an update to the game in 2020 changed how saves work. There are now (I think) multiple checksums that need to be validated. By bouncing some saves around several AI agents and doing some trial and error testing, they seem to have cracked it. I left their explanation for how all that works in the file titled FFIV_3D_CHECKSUM_ISSUE_EXPLAINED.
 Anyway, I'll let Jippity take it from here.
 
-This is a desktop, command-line, and interactive terminal editor for the PC/GOG/Steam Final Fantasy IV 3D Remake `SAVE.BIN` format. Version 0.6.0 is implemented in C# on .NET 10, with an Avalonia desktop interface for Windows and Linux.
+This is a desktop, command-line, and interactive terminal editor for the PC/GOG/Steam Final Fantasy IV 3D Remake `SAVE.BIN` format. Version 0.6.1 is implemented in C# on .NET 10, with an Avalonia desktop interface for Windows and Linux.
 
 ## Features
 
@@ -57,7 +57,7 @@ Install the .NET 10 SDK, then run:
 dotnet restore FFIV3D.SaveEditor.slnx
 dotnet build FFIV3D.SaveEditor.slnx --configuration Release
 dotnet test FFIV3D.SaveEditor.slnx --configuration Release
-./scripts/build-release.sh v0.6.0
+./scripts/build-release.sh v0.6.1
 ```
 
 The release script runs on Linux and publishes both `win-x64` and `linux-x64` self-contained single-file applications. Output goes to `artifacts/` unless another directory is supplied.
